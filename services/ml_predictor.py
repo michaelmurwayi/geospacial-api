@@ -1,64 +1,81 @@
+# app/services/ml_predictor.py
 import requests
+import json
+import re
 
 class MLPredictor:
+    """
+    Predictor for coffee suitability using Ollama LLM.
+    Returns a structured JSON with score, limiting factors, suitability, and explanation.
+    """
 
     def predict(self, data):
-        # Step 1: Build a detailed prompt for scoring
+        # 1. Build a strict JSON prompt for LLM
         prompt = f"""
-        You are an expert in coffee agronomy.
+            You are an expert in coffee agronomy.
 
-        Arabica coffee grows best under these conditions:
-        - Soil pH: 5.5 – 6.5
-        - Rainfall: 1200 – 1800 mm/year
-        - Temperature: 15 – 24°C
-        - Elevation: 1200 – 2200 m
+            Arabica coffee grows best under:
+            - Soil pH: 5.5 – 6.5
+            - Rainfall: 1200 – 1800 mm/year
+            - Temperature: 15 – 24°C
+            - Elevation: 1200 – 2200 m
 
-        Score each factor from 0 to 25 points based on how suitable it is.
-        - 25 points if the factor is ideal
-        - 0 points if the factor is unsuitable
-        Also list any limiting factors that fall outside the ideal range.
+            Evaluate the following conditions:
+            Soil pH: {data['soil_ph']}
+            Rainfall: {data['rainfall']} mm/year
+            Temperature: {data['temperature']} °C
+            Elevation: {data['elevation']} m
 
-        Here are the conditions to evaluate:
+            Return STRICT JSON ONLY with the following keys:
+            - "score": integer 0–100
+            - "limiting_factors": list of strings
+            - "suitability": "Suitable" or "Not Suitable"
+            - "explanation": short explanation
 
-        Soil pH: {data['soil_ph']}
-        Rainfall: {data['rainfall']} mm/year
-        Temperature: {data['temperature']} °C
-        Elevation: {data['elevation']} m
+            Do NOT include any text outside the JSON object.
+            """
 
-        Return a JSON object like this:
-
-        {{
-        "score": total_score_out_of_100,
-        "limiting_factors": [list of factors],
-        "suitability": "Suitable" or "Not Suitable",
-        "explanation": "Short explanation of why these conditions are suitable or not."
-        }}
-        """
-
-        # Step 2: Send the prompt to Ollama
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama3",
-                "prompt": prompt,
-                "stream": False
+        # 2. Call Ollama API
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "llama3",
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=10
+            )
+            raw_text = response.json()["response"].strip()
+        except Exception as e:
+            # Fail gracefully
+            return {
+                "score": None,
+                "limiting_factors": [],
+                "suitability": "Unknown",
+                "explanation": f"Ollama API error: {str(e)}"
             }
-        )
 
-        # Step 3: Parse the response
-        raw_text = response.json()["response"].strip()
+        # 3. Extract JSON from LLM response safely
+        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if match:
+            raw_text = match.group()
 
-        # LLM should return JSON; attempt to parse
-        import json
         try:
             result = json.loads(raw_text)
         except json.JSONDecodeError:
-            # Fallback if LLM output is not perfect
+            # fallback: return raw text in explanation
             result = {
                 "score": None,
                 "limiting_factors": [],
                 "suitability": "Unknown",
                 "explanation": raw_text
             }
+
+        # 4. Clean values and enforce types
+        result["score"] = int(result["score"]) if result.get("score") is not None else None
+        result["limiting_factors"] = result.get("limiting_factors", [])
+        result["suitability"] = result.get("suitability", "Unknown")
+        result["explanation"] = result.get("explanation", "")
 
         return result
