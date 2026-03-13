@@ -3,7 +3,7 @@ from django.db import models
 # Create your models here.
 
 class Suitability(models.Model):
-    id = models.CharField(primary_key=True, unique=True, max_length=100)
+    id = models.AutoField(primary_key=True, unique=True)
     soil_ph = models.FloatField()
     rainfall = models.FloatField()
     temperature = models.FloatField()
