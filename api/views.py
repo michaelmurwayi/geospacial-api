@@ -1,9 +1,15 @@
 from django.shortcuts import render
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from services.suitability_service import SuitabilityService
+from rest_framework import status
+
 from api.serializers import SuitabilitySerializer
+
+from services.suitability_service import SuitabilityService
 from services.ml_predictor import MLPredictor
+from services.temperature_service import TemperatureService
+
 
 
 
@@ -22,13 +28,36 @@ class SuitabilityPredictView(APIView):
         return Response(result)
      
 class LocationDataView(APIView):
-    
-    def post(self, request):
-         latitude = request.data.get("latitude")
-         longitude = request.data.get("longitude")
-         Data = {
-             "latitude": latitude,
-             "longitude": longitude
-         }
 
-         return Response(Data)
+    def post(self, request):
+        latitude = request.data.get("latitude")
+        longitude = request.data.get("longitude")
+
+        # ---------------- VALIDATION ----------------
+        if latitude is None or longitude is None:
+            return Response(
+                {"error": "latitude and longitude are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            latitude = float(latitude)
+            longitude = float(longitude)
+        except ValueError:
+            return Response(
+                {"error": "latitude and longitude must be numbers"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---------------- SERVICE CALL ----------------
+        service = TemperatureService(latitude, longitude)
+        temperature_data = service.get_temperature_summary()
+
+        # ---------------- RESPONSE ----------------
+        data = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "temperature": temperature_data,  # ✅ now it's JSON serializable
+        }
+
+        return Response(data, status=status.HTTP_200_OK)
