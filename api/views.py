@@ -9,6 +9,7 @@ from api.serializers import SuitabilitySerializer
 from services.suitability_service import SuitabilityService
 from services.ml_predictor import MLPredictor
 from services.temperature_service import TemperatureService
+from services.rainfall_service import RainfallService
 
 
 
@@ -30,34 +31,39 @@ class SuitabilityPredictView(APIView):
 class LocationDataView(APIView):
 
     def post(self, request):
-        latitude = request.data.get("latitude")
-        longitude = request.data.get("longitude")
+      latitude = request.data.get("latitude")
+      longitude = request.data.get("longitude")
 
         # ---------------- VALIDATION ----------------
-        if latitude is None or longitude is None:
+      if latitude is None or longitude is None:
             return Response(
-                {"error": "latitude and longitude are required"},
-                status=status.HTTP_400_BAD_REQUEST,
+               {"error": "latitude and longitude are required"},
+               status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            latitude = float(latitude)
-            longitude = float(longitude)
-        except ValueError:
-            return Response(
-                {"error": "latitude and longitude must be numbers"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+      try:
+         latitude = float(latitude)
+         longitude = float(longitude)
+      except ValueError:
+         return Response(
+            {"error": "latitude and longitude must be numbers"},
+            status=status.HTTP_400_BAD_REQUEST,
+         )
 
-        # ---------------- SERVICE CALL ----------------
-        service = TemperatureService(latitude, longitude)
-        temperature_data = service.get_temperature_summary()
+      # ---------------- SERVICE CALL ----------------
+      temperature_service = TemperatureService(latitude, longitude)
+      temperature_data = temperature_service.get_temperature_summary()
 
-        # ---------------- RESPONSE ----------------
-        data = {
+      rainfall_service = RainfallService(latitude, longitude)
+      rainfall_data = rainfall_service.get_rainfall_summary()
+      
+
+      # ---------------- RESPONSE ----------------
+      data = {
             "latitude": latitude,
             "longitude": longitude,
             "temperature": temperature_data,  # ✅ now it's JSON serializable
-        }
+            "rainfall": rainfall_data
+      }
 
-        return Response(data, status=status.HTTP_200_OK)
+      return Response(data, status=status.HTTP_200_OK)
