@@ -1,27 +1,22 @@
 # app/services/suitability_service.py
 import logging
 from typing import Dict, Any
+from django.utils import timezone
 from .ml_predictor import MLPredictor
 from .llm_explainer import OllamaExplainer
+from  api.models import SuitabilityLog  # import model
 
 logger = logging.getLogger(__name__)
 
 
 class SuitabilityService:
-    """
-    Handles coffee suitability predictions and AI explanations.
-    """
-
     def __init__(self):
-        # ML predictor
         self.predictor = MLPredictor(
             base_url="http://127.0.0.1:11434",
-            model="phi3:mini",   # small model for Kali
+            model="phi3:mini",
             timeout=60,
             max_retries=2
         )
-
-        # Ollama explanation helper
         self.explainer = OllamaExplainer(
             base_url="http://127.0.0.1:11434",
             model="phi3:mini",
@@ -29,27 +24,21 @@ class SuitabilityService:
             max_retries=2
         )
 
-        # Warmup model once at startup (optional)
         if self.explainer.health_check():
             self.explainer.warmup()
-        else:
-            logger.warning("Ollama not available at startup; AI explanations will be skipped.")
 
     def analyze(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Returns combined ML prediction and AI explanation.
-        """
-        # 1️⃣ Run ML prediction
+        # Run prediction
         prediction = self.predictor.predict(input_data)
 
-        # 2️⃣ Initialize default AI explanation
-        ai_explanation: Dict[str, Any] = {
+        # Default explanation
+        ai_explanation = {
             "summary": "AI explanation not generated.",
             "recommendations": [],
             "risk_level": "unknown"
         }
 
-        # 3️⃣ Call Ollama for explanation if available
+        # Generate AI explanation
         if self.explainer.health_check():
             try:
                 ai_explanation = self.explainer.explain_suitability(
@@ -59,10 +48,20 @@ class SuitabilityService:
             except Exception as e:
                 logger.warning("Ollama explanation failed: %s", str(e))
 
-        else:
-            logger.warning("Ollama unavailable; skipping AI explanation.")
+        # Save to database
+        try:
+            SuitabilityLog.objects.create(
+                created_at=timezone.now(),
+                location_name=input_data.get("location_name"),
+                latitude=input_data.get("latitude"),
+                longitude=input_data.get("longitude"),
+                input_data=input_data,
+                prediction=prediction,
+                ai_explanation=ai_explanation
+            )
+        except Exception as e:
+            logger.error("Failed to save suitability log: %s", str(e))
 
-        # 4️⃣ Return combined result
         return {
             "prediction": prediction,
             "ai_explanation": ai_explanation

@@ -20,3 +20,15 @@ class SuitabilityPredictView(APIView):
         result = predictor.predict(data)
 
         return Response(result)
+     
+class LocationDataView(APIView):
+    
+    def post(self, request):
+         latitude = request.data.get("latitude")
+         longitude = request.data.get("longitude")
+         Data = {
+             "latitude": latitude,
+             "longitude": longitude
+         }
+
+         return Response(Data)
