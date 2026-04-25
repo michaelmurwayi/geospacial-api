@@ -10,7 +10,8 @@ from services.suitability_service import SuitabilityService
 from services.ml_predictor import MLPredictor
 from services.temperature_service import TemperatureService
 from services.rainfall_service import RainfallService
-
+from services.geo_service import GeoSpatialService
+from services.vegetation_service import VegetationService
 
 
 
@@ -56,6 +57,13 @@ class LocationDataView(APIView):
 
       rainfall_service = RainfallService(latitude, longitude)
       rainfall_data = rainfall_service.get_rainfall_summary()
+
+      geo_service = GeoSpatialService(latitude, longitude)
+      geo_data = geo_service.get_geospatial_summary()
+
+      vegetation_service = VegetationService(latitude, longitude)
+      vegetation_data = vegetation_service.get_vegetation_summary()
+
       
 
       # ---------------- RESPONSE ----------------
@@ -63,7 +71,9 @@ class LocationDataView(APIView):
             "latitude": latitude,
             "longitude": longitude,
             "temperature": temperature_data,  # ✅ now it's JSON serializable
-            "rainfall": rainfall_data
+            "rainfall": rainfall_data,
+            "geo": geo_data,
+            "vegetation": vegetation_data
       }
 
       return Response(data, status=status.HTTP_200_OK)
