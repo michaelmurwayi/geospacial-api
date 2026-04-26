@@ -1,69 +1,90 @@
-# app/services/suitability_service.py
-import logging
-from typing import Dict, Any
-from .ml_predictor import MLPredictor
-from .llm_explainer import OllamaExplainer
+import requests
+import json
+import re
 
-logger = logging.getLogger(__name__)
+from utilitis.context_builder import SuitabilityContextBuilder
 
+class OllamaSuitabilityEngine:
 
-class SuitabilityService:
-    """
-    Handles coffee suitability predictions and AI explanations.
-    """
+    def __init__(
+        self,
+        base_url="http://127.0.0.1:11434",
+        model="phi3:mini",
+    ):
+        self.base_url = base_url
+        self.model = model
 
-    def __init__(self):
-        # ML predictor
-        self.predictor = MLPredictor(
-            base_url="http://127.0.0.1:11434",
-            model="phi3:mini",   # small model for Kali
-            timeout=60,
-            max_retries=2
+    def predict(self, data):
+
+        context = SuitabilityContextBuilder().build(data)
+        prompt = self._build_prompt(context)
+
+        response = requests.post(
+            f"{self.base_url}/api/generate",
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False
+            }
         )
 
-        # Ollama explanation helper
-        self.explainer = OllamaExplainer(
-            base_url="http://127.0.0.1:11434",
-            model="phi3:mini",
-            timeout=60,
-            max_retries=2
-        )
+        raw = response.json().get("response", "")
 
-        # Warmup model once at startup (optional)
-        if self.explainer.health_check():
-            self.explainer.warmup()
-        else:
-            logger.warning("Ollama not available at startup; AI explanations will be skipped.")
+        return self._extract_json(raw)
 
-    def analyze(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Returns combined ML prediction and AI explanation.
-        """
-        # 1️⃣ Run ML prediction
-        prediction = self.predictor.predict(input_data)
+    def _build_prompt(self, c):
 
-        # 2️⃣ Initialize default AI explanation
-        ai_explanation: Dict[str, Any] = {
-            "summary": "AI explanation not generated.",
-            "recommendations": [],
-            "risk_level": "unknown"
-        }
+        return f"""
+            You are an agricultural suitability expert for Arabica coffee in Kenya.
 
-        # 3️⃣ Call Ollama for explanation if available
-        if self.explainer.health_check():
-            try:
-                ai_explanation = self.explainer.explain_suitability(
-                    features=input_data,
-                    prediction=prediction
-                )
-            except Exception as e:
-                logger.warning("Ollama explanation failed: %s", str(e))
+            Use ONLY the structured data below.
 
-        else:
-            logger.warning("Ollama unavailable; skipping AI explanation.")
+            DATA:
 
-        # 4️⃣ Return combined result
-        return {
-            "prediction": prediction,
-            "ai_explanation": ai_explanation
-        }
+            Location:
+            - Lat: {c['latitude']}
+            - Lon: {c['longitude']}
+
+            Temperature:
+            - Current: {c['current_temp']} °C
+            - Avg: {c['temp_avg']} °C
+            - Range: {c['temp_min']} - {c['temp_max']}
+
+            Rainfall:
+            - Current: {c['rain_current']} mm
+            - Weekly: {c['rain_weekly']} mm
+            - Range: {c['rain_min']} - {c['rain_max']}
+
+            Geography:
+            - Elevation: {c['elevation']} m
+            - Soil: {c['soil']}
+
+            Vegetation:
+            - NDVI: {c['ndvi']}
+            - Land cover: {c['land_cover']}
+
+            TASK:
+            Evaluate suitability for coffee farming.
+
+            Return STRICT JSON ONLY:
+
+            {{
+            "score": 0-100,
+            "suitability": "Highly Suitable | Moderately Suitable | Not Suitable",
+            "limiting_factors": ["..."],
+            "reason": "short explanation"
+            }}
+            """.strip()
+
+    def _extract_json(self, text):
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+
+        if not match:
+            return {
+                "score": None,
+                "suitability": "Unknown",
+                "limiting_factors": [],
+                "reason": "Invalid LLM response"
+            }
+
+        return json.loads(match.group())
