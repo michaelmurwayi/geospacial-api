@@ -6,8 +6,7 @@ from rest_framework import status
 
 from api.serializers import SuitabilitySerializer
 
-from services.suitability_service import SuitabilityService
-from services.ml_predictor import MLPredictor
+from services.suitability_service import OllamaSuitabilityEngine
 from services.temperature_service import TemperatureService
 from services.rainfall_service import RainfallService
 from services.geo_service import GeoSpatialService
@@ -19,15 +18,21 @@ from services.vegetation_service import VegetationService
 
 class SuitabilityPredictView(APIView):
 
-     def post(self, request):
+    def post(self, request):
+
         serializer = SuitabilitySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         data = serializer.validated_data
 
-        predictor = MLPredictor()
-        result = predictor.predict(data)
+        engine = OllamaSuitabilityEngine()
+        result = engine.predict(data)
 
-        return Response(result)
+        return Response({
+            "input": data,
+            "result": result
+        })
+    
      
 class LocationDataView(APIView):
 
