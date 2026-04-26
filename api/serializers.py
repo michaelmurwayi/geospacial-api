@@ -35,3 +35,7 @@ class SuitabilitySerializer(serializers.Serializer):
     rainfall = RainfallSerializer()
     geo = GeoSerializer()
     vegetation = VegetationSerializer()
+
+class ReportSerializer(serializers.Serializer):
+    input = SuitabilitySerializer()
+    result = serializers.DictField()
